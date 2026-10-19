@@ -1,0 +1,28 @@
+# Dependencies and package-manager artifacts
+node_modules/
+.npm/
+
+# Local OpenCode runtime data and generated state
+context-mode/
+peon-ping/
+opencode-notifier-state.json
+waiting-task-state.json
+tui.json
+.ponytail-active
+opencode.json.bak-*
+*.bak
+
+# Local overrides, credentials, and environment files
+.env
+.env.*
+!.env.example
+*.local.json
+local/
+
+# System and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Installer validation scratch space
+.tmp/
