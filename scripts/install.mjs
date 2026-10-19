@@ -14,11 +14,6 @@ export const MANAGED_TARGETS = [
 
 const repoRoot = resolve(import.meta.dirname, "..")
 const sourceRoot = join(repoRoot, "opencode")
-const RETIRED_TARGETS = [
-  { entry: "skills/context-mode-research", source: join(sourceRoot, "skills/context-mode-research") },
-  { entry: "node_modules/context-mode", source: join(repoRoot, "node_modules/context-mode") },
-]
-
 export function defaultTarget(environment = process.env) {
   return join(environment.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode")
 }
@@ -53,16 +48,11 @@ export async function install(target, { yes = false, dryRun = false, now = new D
     const owned = kind === "symlink" && await pointsTo(entry.destination, entry.source)
     if (!owned) changes.push({ ...entry, kind })
   }
-  const retired = []
-  for (const entry of RETIRED_TARGETS) {
-    const destination = join(target, entry.entry)
-    if (await pointsTo(destination, entry.source)) retired.push({ ...entry, destination })
-  }
-  if ((changes.length || retired.length) && !yes && !dryRun) throw new Error("Refusing to change targets without --yes. Review --dry-run first.")
+  if (changes.length && !yes && !dryRun) throw new Error("Refusing to change targets without --yes. Review --dry-run first.")
   const stamp = now.toISOString().replace(/[:.]/g, "-")
   const backup = join(backupRoot, stamp)
-  if (dryRun) return { action: "install", target, backup, changes: [...changes.map(({ entry, kind }) => `${entry}: ${kind}`), ...retired.map(({ entry }) => `${entry}: retire owned symlink`)] }
-  if (!changes.length && !retired.length) return { action: "install", target, backup: undefined, changes: [], moved: [] }
+  if (dryRun) return { action: "install", target, backup, changes: changes.map(({ entry, kind }) => `${entry}: ${kind}`) }
+  if (!changes.length) return { action: "install", target, backup: undefined, changes: [], moved: [] }
 
   const moved = []
   const created = []
@@ -76,40 +66,34 @@ export async function install(target, { yes = false, dryRun = false, now = new D
     } else created.push(entry.entry)
     await symlink(entry.source, entry.destination)
   }
-  for (const entry of retired) {
-    // Recheck immediately before unlinking; never remove a replacement or real directory.
-    if (await pointsTo(entry.destination, entry.source)) await rm(entry.destination)
-  }
   await mkdir(backup, { recursive: true })
-  await writeFile(join(backup, "manifest.json"), `${JSON.stringify({ target, moved, created, managed: MANAGED_TARGETS, retired: retired.map(({ entry, source }) => ({ entry, source })) }, null, 2)}\n`)
-  return { action: "install", target, backup, changes: [...changes.map(({ entry }) => entry), ...retired.map(({ entry }) => entry)], moved }
+  await writeFile(join(backup, "manifest.json"), `${JSON.stringify({ target, moved, created }, null, 2)}\n`)
+  return { action: "install", target, backup, changes: changes.map(({ entry }) => entry), moved }
 }
 
 export async function restore(target, { yes = false, dryRun = false, backup } = {}) {
   const selected = backup || await latestBackup()
   if (!selected) throw new Error("No installer backup is available to restore.")
   const manifest = JSON.parse(await readFile(join(selected, "manifest.json"), "utf8"))
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) ||
+      Object.keys(manifest).some((key) => !["target", "moved", "created"].includes(key)) ||
+      typeof manifest.target !== "string" || !Array.isArray(manifest.moved) || !Array.isArray(manifest.created) ||
+      [...manifest.moved, ...manifest.created].some((entry) => typeof entry !== "string") ||
+      new Set([...manifest.moved, ...manifest.created]).size !== manifest.moved.length + manifest.created.length) {
+    throw new Error("Unsupported or malformed installer backup manifest.")
+  }
   if (resolve(manifest.target) !== resolve(target)) throw new Error("Backup belongs to a different target directory.")
-  // Older manifests have only `moved` and `managed`. Their installed-but-not-
-  // moved links are ambiguous, so leave those links in place rather than deleting them.
-  const moved = new Set(manifest.moved || [])
-  const created = new Set(manifest.created || [])
-  const retired = new Map((manifest.retired || []).map((value) =>
-    typeof value === "string" ? [value, undefined] : [value.entry, value.source]))
-  const known = [...planTargets(target), ...RETIRED_TARGETS.map((entry) => ({ ...entry, destination: join(target, entry.entry) }))]
-  const allowed = new Map(known.map((entry) => [entry.entry, entry]))
-  for (const entry of [...moved, ...created, ...retired.keys()]) {
-    if (!allowed.has(entry)) throw new Error(`Unknown backup target: ${entry}`)
+  const moved = new Set(manifest.moved)
+  const created = new Set(manifest.created)
+  const known = planTargets(target)
+  for (const entry of [...moved, ...created]) {
+    if (!MANAGED_TARGETS.includes(entry)) throw new Error(`Unknown backup target: ${entry}`)
   }
   const changes = []
   for (const entry of known) {
     const restoreBackup = moved.has(entry.entry)
     const removeCreated = created.has(entry.entry)
-    const restoreRetired = retired.has(entry.entry)
-    if (!restoreBackup && !removeCreated && !restoreRetired) continue
-    if (restoreRetired && retired.get(entry.entry) && resolve(retired.get(entry.entry)) !== resolve(entry.source)) {
-      throw new Error(`Retired target has an unexpected source: ${entry.entry}`)
-    }
+    if (!restoreBackup && !removeCreated) continue
     const kind = await entryKind(entry.destination)
     if (kind !== "missing" && !(kind === "symlink" && await pointsTo(entry.destination, entry.source))) {
       throw new Error(`Refusing to restore over unmanaged target: ${entry.entry}`)
@@ -117,8 +101,8 @@ export async function restore(target, { yes = false, dryRun = false, backup } = 
     if (restoreBackup && await entryKind(join(selected, entry.entry)) === "missing") {
       throw new Error(`Backup target is missing: ${entry.entry}`)
     }
-    if (restoreBackup || (removeCreated && kind !== "missing") || (restoreRetired && kind === "missing")) {
-      changes.push({ ...entry, restoreBackup, removeCreated, restoreRetired })
+    if (restoreBackup || (removeCreated && kind !== "missing")) {
+      changes.push({ ...entry, restoreBackup, removeCreated })
     }
   }
   if (dryRun) return { action: "restore", target, backup: selected, changes: changes.map(({ entry }) => entry) }
@@ -133,9 +117,6 @@ export async function restore(target, { yes = false, dryRun = false, backup } = 
     if (entry.restoreBackup) {
       await mkdir(dirname(entry.destination), { recursive: true })
       await cp(saved, entry.destination, { recursive: true, force: false })
-    } else if (entry.restoreRetired && kind === "missing") {
-      await mkdir(dirname(entry.destination), { recursive: true })
-      await symlink(entry.source, entry.destination)
     }
   }
   return { action: "restore", target, backup: selected, changes: changes.map(({ entry }) => entry) }

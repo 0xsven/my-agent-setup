@@ -4,15 +4,14 @@ import test from "node:test"
 
 const config = JSON.parse(readFileSync(new URL("../opencode.json", import.meta.url), "utf8"))
 
-test("compaction selects GPT-6.1 Sol/medium without replacing the native prompt or permissions", () => {
-  assert.deepEqual(config.agent.compaction, {
-    model: "openai/gpt-6.1-sol",
-    variant: "medium",
-    options: { reasoningEffort: "medium" },
+test("compaction configures GPT-6.1 Sol/medium without replacing the native prompt or permissions", () => {
+  assert.deepEqual(config.agents.compaction, {
+    model: "openai/gpt-6.1-sol#medium",
+    request: { body: { reasoningEffort: "medium" } },
   })
   assert.equal(config.default_agent, "plan")
-  assert.equal(Object.hasOwn(config.agent.plan, "prompt"), false)
-  assert.equal(Object.hasOwn(config.agent.plan, "model"), false)
+  assert.equal(Object.hasOwn(config.agents.plan, "system"), false)
+  assert.equal(Object.hasOwn(config.agents.plan, "model"), false)
 })
 
 test("automatic compaction preserves a 15k recent tail without changing pruning or turn limits", () => {
@@ -24,9 +23,9 @@ test("automatic compaction preserves a 15k recent tail without changing pruning 
 })
 
 test("every configured model has the 272k context/input cap and a 240k compaction threshold", () => {
-  const models = Object.entries(config.provider).flatMap(([provider, config]) =>
+  const models = Object.entries(config.providers).flatMap(([provider, config]) =>
     Object.entries(config.models ?? {}).map(([name, model]) => [`${provider}/${name}`, model]))
-  assert.equal(models.length, 15)
+  assert.equal(models.length, 3)
   for (const [name, model] of models) {
     const expectedLimit = { context: 272000, input: 272000, output: 128000 }
     const expectedThreshold = expectedLimit.input - config.compaction.buffer

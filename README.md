@@ -7,7 +7,6 @@ Requires OpenCode V2 and Node.js 22+.
 ```sh
 git clone git@github.com:0xsven/my-agent-setup.git
 cd my-agent-setup
-npm ci
 node scripts/install.mjs --install --yes
 ```
 

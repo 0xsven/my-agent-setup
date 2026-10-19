@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 const config = JSON.parse(readFileSync(new URL("../opencode.json", import.meta.url), "utf8"))
-const openai = config.provider.openai
+const openai = config.providers.openai
 const expectedEfforts = {
   none: "none",
   low: "low",
@@ -14,7 +14,7 @@ const expectedEfforts = {
 }
 
 test("OpenAI defaults and every configured variant inherit them", () => {
-  assert.deepEqual(openai.options, {
+  assert.deepEqual(openai.settings, {
     reasoningEffort: "medium",
     reasoningSummary: "auto",
     textVerbosity: "low",
@@ -24,7 +24,7 @@ test("OpenAI defaults and every configured variant inherit them", () => {
 
   for (const [name, model] of Object.entries(openai.models)) {
     assert.deepEqual(model.limit, { context: 272000, input: 272000, output: 128000 }, name)
-    for (const [variant, options] of Object.entries(model.variants ?? {})) {
+    for (const { id: variant, settings: options } of model.variants ?? []) {
       assert.equal(Object.hasOwn(options, "textVerbosity"), false, `${name}/${variant}`)
       assert.equal(Object.hasOwn(options, "reasoningSummary"), false, `${name}/${variant}`)
       assert.equal(options.reasoningEffort, expectedEfforts[variant], `${name}/${variant}`)

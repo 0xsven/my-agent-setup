@@ -1,17 +1,18 @@
 ---
 description: Reviews a GitHub pull request URL for concrete behavioral and architectural issues. Use when asked to review a PR, branch, diff, or code before merge.
 mode: subagent
-model: openai/gpt-6.1-sol
-reasoningEffort: high
-temperature: 0.1
+model: openai/gpt-6.1-sol#high
+request:
+  body:
+    reasoningEffort: high
+    temperature: 0.1
 steps: 60
-permission:
-  edit: deny
-  bash: allow
-  task: deny
-  "chrome-devtools_*": deny
-  "figma-mcp-dektop_*": deny
-  "pencil_*": deny
+permissions:
+  - { action: edit, resource: "*", effect: deny }
+  - { action: shell, resource: "*", effect: allow }
+  - { action: subagent, resource: "*", effect: deny }
+  - { action: "chrome-devtools_*", resource: "*", effect: deny }
+  - { action: "figma-mcp-desktop_*", resource: "*", effect: deny }
 ---
 
 You are a senior software engineer performing a practical pull-request review.

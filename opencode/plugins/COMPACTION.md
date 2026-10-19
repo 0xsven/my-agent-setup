@@ -2,10 +2,10 @@
 
 Configured in `../opencode.json`:
 
-- The hidden stock `compaction` agent uses `openai/gpt-6.1-sol`.
+- The hidden stock `compaction` agent is configured with `openai/gpt-6.1-sol#medium`.
 - Its intended reasoning effort is `medium`.
-- All 15 configured OpenAI models explicitly declare `context: 272000` and
-  `input: 272000`, including GPT-6 Sol, GPT-6.1 Sol, and GPT-6 Luna. These are
+- All three configured OpenAI models explicitly declare `context: 272000` and
+  `input: 272000`: GPT-6.1 Sol, GPT-6 Luna, and GPT-6 Astra. These are
   deliberate local caps, not the models' native capacities. Output limits remain `128000`.
 - Automatic compaction uses a 32,000-token buffer. The configured
   `limit.input - compaction.buffer` gives a trigger of approximately 240,000
@@ -30,13 +30,16 @@ sets only `event.options.reasoningEffort` to `medium` for OpenAI checkpoint
 summaries. It does not change the parent model, variant, prompt, tools, or
 other request parameters.
 
-This also applies when a subagent needs compaction. The hook enforces the
-outgoing effort, not a stored variant label. Recheck this guard when upgrading
-OpenCode's compaction path.
+The hook also covers subagent compaction requests and enforces the effort option,
+not just a stored variant label. The configured hidden-agent model override is
+preserved, but its runtime precedence over the active context model in automatic
+and manual compaction has not been verified. These checks do not establish which
+model reaches the provider. Recheck this guard when upgrading OpenCode's
+compaction path.
 
 ## Checks
 
-Run from the repository root, using Node 22 or later after `npm ci`:
+Run from the repository root, using Node 22 or later:
 
 ```sh
 node --test opencode/bin/compaction-reasoning.test.mjs opencode/bin/compaction-settings.test.mjs

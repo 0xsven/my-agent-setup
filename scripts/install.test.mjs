@@ -31,39 +31,7 @@ test("global config plugin paths resolve through installed symlinks from any wor
   }
 })
 
-test("retires only repository-owned context-mode links and leaves unrelated files alone", async () => {
-  const target = await mkdtemp(join(tmpdir(), "opencode-setup-retire-"))
-  await mkdir(join(target, "skills"))
-  await mkdir(join(target, "node_modules"))
-  const source = resolve(import.meta.dirname, "../opencode/skills/context-mode-research")
-  const owned = join(target, "skills/context-mode-research")
-  const packageLink = join(target, "node_modules/context-mode")
-  const packageSource = resolve(import.meta.dirname, "../node_modules/context-mode")
-  const unrelated = join(target, "node_modules/unrelated")
-  await symlink(source, owned)
-  // This link may be dangling after npm ci removes the old dependency.
-  await symlink(packageSource, packageLink)
-  await writeFile(unrelated, "user-owned")
-  const preview = await install(target, { dryRun: true })
-  assert(preview.changes.includes("skills/context-mode-research: retire owned symlink"))
-  assert(preview.changes.includes("node_modules/context-mode: retire owned symlink"))
-  const installed = await install(target, { yes: true, backupRoot: backupRoot(target) })
-  await assert.rejects(lstat(owned), { code: "ENOENT" })
-  await assert.rejects(lstat(packageLink), { code: "ENOENT" })
-  assert.equal(await readlink(join(target, "plugins")), resolve(import.meta.dirname, "../opencode/plugins"))
-  await assert.rejects(readlink(unrelated), { code: "EINVAL" })
-  const plan = await restore(target, { backup: installed.backup, dryRun: true })
-  assert(plan.changes.includes("skills/context-mode-research"))
-  assert(plan.changes.includes("node_modules/context-mode"))
-  await restore(target, { backup: installed.backup, yes: true })
-  assert.equal(await readlink(owned), source)
-  assert.equal(await readlink(packageLink), packageSource)
-  await assert.rejects(lstat(join(target, "plugins")), { code: "ENOENT" })
-  assert.equal(await readFile(unrelated, "utf8"), "user-owned")
-  await rm(target, { recursive: true, force: true })
-})
-
-test("reinstall and legacy moved:[] backups never remove previously installed links", async () => {
+test("reinstall creates no backup and rejects legacy manifests without removing installed links", async () => {
   const target = await mkdtemp(join(tmpdir(), "opencode-setup-reinstall-"))
   try {
     const first = await install(target, { yes: true, backupRoot: backupRoot(target) })
@@ -73,8 +41,7 @@ test("reinstall and legacy moved:[] backups never remove previously installed li
     const legacy = join(target, "legacy-backup")
     await mkdir(legacy)
     await writeFile(join(legacy, "manifest.json"), JSON.stringify({ target, moved: [], managed: MANAGED_TARGETS }))
-    assert.deepEqual((await restore(target, { backup: legacy, dryRun: true })).changes, [])
-    assert.deepEqual((await restore(target, { backup: legacy, yes: true })).changes, [])
+    await assert.rejects(restore(target, { backup: legacy, yes: true }), /Unsupported or malformed/)
     for (const entry of planTargets(target)) assert(await pointsTo(entry.destination, entry.source))
     await restore(target, { backup: first.backup, yes: true })
     for (const entry of planTargets(target)) await assert.rejects(lstat(entry.destination), { code: "ENOENT" })
@@ -83,7 +50,7 @@ test("reinstall and legacy moved:[] backups never remove previously installed li
   }
 })
 
-test("restores retired links from the prior V2 manifest format without removing pre-existing managed links", async () => {
+test("rejects retired-target manifests without changing managed links", async () => {
   const target = await mkdtemp(join(tmpdir(), "opencode-setup-legacy-retired-"))
   try {
     const installed = await install(target, { yes: true, backupRoot: backupRoot(target) })
@@ -92,14 +59,12 @@ test("restores retired links from the prior V2 manifest format without removing 
     await writeFile(join(oldManifest, "manifest.json"), JSON.stringify({
       target,
       moved: [],
+      created: ["opencode.json"],
       managed: MANAGED_TARGETS,
-      retired: ["skills/context-mode-research", "node_modules/context-mode"],
+      retired: [{ entry: "skills/context-mode-research", source: "/legacy/context-mode-research" }],
     }))
-    const result = await restore(target, { backup: oldManifest, yes: true })
-    assert.deepEqual(result.changes, ["skills/context-mode-research", "node_modules/context-mode"])
+    await assert.rejects(restore(target, { backup: oldManifest, yes: true }), /Unsupported or malformed/)
     for (const entry of planTargets(target)) assert(await pointsTo(entry.destination, entry.source))
-    assert(await pointsTo(join(target, "skills/context-mode-research"), resolve(import.meta.dirname, "../opencode/skills/context-mode-research")))
-    assert(await pointsTo(join(target, "node_modules/context-mode"), resolve(import.meta.dirname, "../node_modules/context-mode")))
     const manifest = JSON.parse(await readFile(join(installed.backup, "manifest.json"), "utf8"))
     assert.equal(manifest.created.length, MANAGED_TARGETS.length)
   } finally {
@@ -107,7 +72,7 @@ test("restores retired links from the prior V2 manifest format without removing 
   }
 })
 
-test("restores a displaced original V1 target without changing its backup", async () => {
+test("restores a displaced original target without changing its backup", async () => {
   const target = await mkdtemp(join(tmpdir(), "opencode-setup-moved-"))
   try {
     await writeFile(join(target, "opencode.json"), "original")
@@ -123,16 +88,12 @@ test("restores a displaced original V1 target without changing its backup", asyn
 test("refuses restore over user-replaced files before changing any managed target", async () => {
   const target = await mkdtemp(join(tmpdir(), "opencode-setup-user-replaced-"))
   try {
-    const source = resolve(import.meta.dirname, "../opencode/skills/context-mode-research")
-    await mkdir(join(target, "skills"))
-    await symlink(source, join(target, "skills/context-mode-research"))
     const installed = await install(target, { yes: true, backupRoot: backupRoot(target) })
     await rm(join(target, "plugins"))
     await writeFile(join(target, "plugins"), "user replacement")
     await assert.rejects(restore(target, { backup: installed.backup, yes: true }), /unmanaged target: plugins/)
     assert.equal(await readFile(join(target, "plugins"), "utf8"), "user replacement")
     assert(await pointsTo(join(target, "opencode.json"), resolve(import.meta.dirname, "../opencode/opencode.json")))
-    await assert.rejects(lstat(join(target, "skills/context-mode-research")), { code: "ENOENT" })
   } finally {
     await rm(target, { recursive: true, force: true })
   }

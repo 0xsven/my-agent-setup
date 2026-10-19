@@ -1,4 +1,3 @@
-import { Plugin } from "@opencode/plugin"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
@@ -23,7 +22,7 @@ export async function rewriteInput(input: { command?: unknown }, execute = run) 
   }
 }
 
-export default Plugin.define({
+export default {
   id: "local.rtk",
   async setup(ctx) {
     try {
@@ -38,4 +37,4 @@ export default Plugin.define({
       await rewriteInput(event.input as { command?: unknown })
     })
   },
-})
+}

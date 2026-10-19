@@ -1,20 +1,22 @@
 ---
 description: Read-only visual QA and browser reconnaissance agent for rendered UI, responsive behavior, interactions, and comparison with Figma, screenshots, or other visual references.
 mode: subagent
-model: openai/gpt-6-luna
-reasoningEffort: medium
-permission:
-  "*": deny
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  webfetch: allow
-  "chrome-devtools_*": allow
-  "figma-mcp-desktop_*": allow
-  edit: deny
-  bash: deny
-  task: deny
+model: openai/gpt-6-luna#medium
+request:
+  body:
+    reasoningEffort: medium
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "*", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: list, resource: "*", effect: allow }
+  - { action: webfetch, resource: "*", effect: allow }
+  - { action: "chrome-devtools_*", resource: "*", effect: allow }
+  - { action: "figma-mcp-desktop_*", resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: deny }
+  - { action: shell, resource: "*", effect: deny }
+  - { action: subagent, resource: "*", effect: deny }
 ---
 
 You are a visual QA and browser-inspection agent. Inspect the actual rendered application rather than inferring visual correctness from source code.
