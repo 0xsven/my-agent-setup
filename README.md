@@ -1,6 +1,6 @@
 # My Agent Setup
 
-Requires OpenCode V2 and Node.js 22+.
+Requires OpenCode Desktop or CLI and Node.js 22+.
 
 ## Install
 
@@ -13,7 +13,7 @@ node scripts/install.mjs --install --yes
 The installer symlinks the configuration into `~/.config/opencode`
 and backs up existing managed files.
 
-Quit and restart OpenCode.
+Restart OpenCode and any running OpenCode background service.
 
 ## Uninstall
 

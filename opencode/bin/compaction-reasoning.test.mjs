@@ -47,3 +47,32 @@ test("leaves unrelated compaction metadata and model untouched", async () => {
   await result(event)
   assert.deepEqual(event, { ...input(), options: { reasoningEffort: "medium" }, title: "keep", maxTokens: 10 })
 })
+
+test("V1 chat.params forces medium only for OpenAI compaction", async () => {
+  const hooks = await plugin.server()
+  for (const reasoningEffort of [undefined, "none", "low", "medium", "high", "xhigh"]) {
+    const options = { reasoningEffort, custom: true }
+    const output = { options, temperature: 0.2, maxOutputTokens: 100 }
+    await hooks["chat.params"]({ agent: "compaction", model: { providerID: "openai" } }, output)
+    assert.equal(output.options, options)
+    assert.deepEqual(output, {
+      options: { reasoningEffort: "medium", custom: true }, temperature: 0.2, maxOutputTokens: 100,
+    })
+  }
+})
+
+test("V1 chat.params preserves other providers' compaction options", async () => {
+  const hooks = await plugin.server()
+  const output = { options: { reasoningEffort: "high", custom: true } }
+  await hooks["chat.params"]({ agent: "compaction", model: { providerID: "anthropic" } }, output)
+  assert.deepEqual(output, { options: { reasoningEffort: "high", custom: true } })
+})
+
+test("V1 chat.params preserves normal agents' reasoning effort", async () => {
+  const hooks = await plugin.server()
+  for (const [agent, reasoningEffort] of [["Deep", "xhigh"], ["Astra", "xhigh"], ["Quick", "low"], ["summary", "high"]]) {
+    const output = { options: { reasoningEffort } }
+    await hooks["chat.params"]({ agent, model: { providerID: "openai" } }, output)
+    assert.deepEqual(output, { options: { reasoningEffort } })
+  }
+})

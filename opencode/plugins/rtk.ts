@@ -10,6 +10,16 @@ import { promisify } from "node:util"
 
 const run = promisify(execFile)
 
+async function available() {
+  try {
+    await run("rtk", ["--version"])
+    return true
+  } catch {
+    console.warn("[rtk] rtk binary not found in PATH — plugin disabled")
+    return false
+  }
+}
+
 export async function rewriteInput(input: { command?: unknown }, execute = run) {
   const command = input?.command
   if (typeof command !== "string" || !command) return
@@ -24,13 +34,17 @@ export async function rewriteInput(input: { command?: unknown }, execute = run) 
 
 export default {
   id: "local.rtk",
-  async setup(ctx) {
-    try {
-      await run("rtk", ["--version"])
-    } catch {
-      console.warn("[rtk] rtk binary not found in PATH — plugin disabled")
-      return
+  async server() {
+    if (!await available()) return {}
+    return {
+      "tool.execute.before": async (input, output) => {
+        if (input.tool !== "bash" && input.tool !== "shell") return
+        await rewriteInput(output.args)
+      },
     }
+  },
+  async setup(ctx) {
+    if (!await available()) return
 
     await ctx.tool.hook("execute.before", async (event) => {
       if (event.tool !== "bash" && event.tool !== "shell") return

@@ -15,15 +15,13 @@ test("plans only the explicit public OpenCode targets", () => {
   assert.equal(MANAGED_TARGETS.includes("tui.json"), false)
 })
 
-test("global config plugin paths resolve through installed symlinks from any working directory", async () => {
+test("auto-discovered global plugins resolve through installed symlinks", async () => {
   const target = await mkdtemp(join(tmpdir(), "opencode-setup-plugin-paths-"))
   try {
     await install(target, { yes: true, backupRoot: backupRoot(target) })
-    const config = JSON.parse(await readFile(join(target, "opencode.json"), "utf8"))
-    assert.deepEqual(config.plugins, ["./plugins/compaction-reasoning.ts", "./plugins/rtk.ts"])
-    for (const relative of config.plugins) {
-      const actual = await realpath(resolve(target, relative))
-      const expected = await realpath(resolve(import.meta.dirname, "../opencode", relative))
+    for (const name of ["compaction-reasoning.ts", "rtk.ts"]) {
+      const actual = await realpath(join(target, "plugins", name))
+      const expected = await realpath(resolve(import.meta.dirname, "../opencode/plugins", name))
       assert.equal(actual, expected)
     }
   } finally {
